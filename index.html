@@ -69,7 +69,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
 .tbl tbody tr{cursor:pointer}
 .tbl tbody tr:hover td{background:var(--hover)}
 .tbl tr.sel td{color:var(--link)}
-.dname{display:flex;align-items:center;font-size:13px;color:var(--muted)}
+.dname{grid-column:1/-1;display:flex;align-items:center;font-size:13px;color:var(--muted)}
 .chk{display:flex;align-items:center;gap:8px;height:44px;font-size:15px;cursor:pointer}
 .chk input{width:16px;height:16px;accent-color:var(--accent);margin:0}
 .menu{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto}
@@ -103,6 +103,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
 #dockInfo{font:13px var(--mono);color:var(--muted);white-space:nowrap;padding-right:6px;overflow:hidden;text-overflow:ellipsis}
 #dockInfo:empty{display:none}
 .sheet{position:absolute;top:12px;left:12px;width:min(380px,calc(100% - 24px));max-height:calc(100% - 96px);overflow-y:auto;box-sizing:border-box;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.sheet.offer{left:auto;right:12px}
 .shead{display:flex;justify-content:space-between;align-items:center}
 .shead b{font-size:17px;font-weight:600}
 .shead .btn{padding:0 12px;font-size:13px}
@@ -126,6 +127,17 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
     <div class="dock" id="dock" hidden>
       <div class="seg" id="umode"><button class="btn on" data-u="0">Войска</button><button class="btn" data-u="1">Флот</button><button class="btn" data-u="2">Артиллерия</button></div>
       <span id="dockInfo"></span>
+    </div>
+    <div class="sheet" id="tre" hidden>
+      <div class="shead"><b id="treT">Договор</b><button class="btn" id="treClose">Закрыть</button></div>
+      <p class="hqst" id="treSt"></p>
+      <div id="treTerms"></div>
+      <button class="btn primary" id="treSend">Предложить</button>
+    </div>
+    <div class="sheet offer" id="offer" hidden>
+      <div class="shead"><b id="ofT"></b></div>
+      <ul class="log" id="ofList"></ul>
+      <div class="btns"><button class="btn primary" id="ofYes">Принять</button><button class="btn" id="ofNo">Отклонить</button></div>
     </div>
     <div class="sheet" id="hq" hidden>
       <div class="shead"><b>Столица</b><button class="btn" id="hqClose">Закрыть</button></div>
@@ -173,6 +185,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
       <div class="btns" id="dipl" hidden>
         <span class="dname" id="dName"></span>
         <button class="btn" id="peace">Объявить войну</button>
+        <button class="btn" id="treBtn">Договор</button>
       </div>
     </div>
     <div class="group" id="logBox" hidden>
@@ -254,7 +267,7 @@ const Lg=(ru,en)=>LANG==='en'?en:ru;
   'Распределение':'Budget','Экипировка':'Equipment','Стройка':'Construction','Продажа за границу':'Exports','Армия':'Army',
   'Прирост':'Growth','Золото':'Gold','Еда':'Food','Железо':'Iron','Торговля':'Trade','Территория':'Territory','Усталость':'War weariness','Сила атаки':'Attack size',
   'Отступить':'Retreat','Город':'City','Форт':'Fort','Добыча':'Mine','Батарея':'Battery','Ресурсы':'Resources','Страна':'Country',
-  'Земля':'Land','Война':'War','Объявить войну':'Declare war','Плотность войск':'Troop density','Пауза':'Pause','Сохранить':'Save','Меню':'Menu','Равнина':'Plains',
+  'Земля':'Land','Война':'War','Объявить войну':'Declare war','Договор':'Treaty','Предложить':'Propose','Принять':'Accept','Отклонить':'Decline','Плотность войск':'Troop density','Пауза':'Pause','Сохранить':'Save','Меню':'Menu','Равнина':'Plains',
   'Лес':'Forest','Горы':'Mountains','Вода':'Water','Старт':'Start','Рука':'Pan','Кисть':'Brush','Случайная основа':'Random base',
   'Всё вода':'All water','Название карты':'Map name','Сохранить карту':'Save map','В меню':'Menu','Рубилка':'Rubilka',
   'Вернуться в игру':'Back to game','Новая игра':'New game','Название страны':'Country name','Цвет':'Color','Карта':'Map',
@@ -363,7 +376,7 @@ function newGame(opt={}){
   if(eu){rnd=mulberry((Math.random()*1e9)|0);const d=euDecode();terr=d.t;euO=d.o;buildNB();genResources()}
   else if(opt.map){rnd=mulberry((Math.random()*1e9)|0);terr=Uint8Array.from(opt.map.terr);buildNB();genResources()}else genMap();
   land=0;for(let i=0;i<N;i++)if(terr[i])land++;
-  own=new Int8Array(N).fill(-1);bld=new Uint8Array(N);forts=[];quarries=[];qv=new Map();roads=[];trades=[];noEnd={lost:false,won:false};csz=new Uint8Array(N);attacks=[];ships=[];warS={};depotT={};over=false;paused=false;clock=0;logArr=[];sites=[];shells=[];booms=[];artCd={};fortHits={};shipId=0;
+  own=new Int8Array(N).fill(-1);bld=new Uint8Array(N);forts=[];quarries=[];qv=new Map();roads=[];trades=[];noEnd={lost:false,won:false};csz=new Uint8Array(N);attacks=[];ships=[];warS={};depotT={};cease={};offers=[];over=false;paused=false;clock=0;logArr=[];sites=[];shells=[];booms=[];artCd={};fortHits={};shipId=0;
   buildMode=0;selC=-1;setBuildMode(0);$('dipl').hidden=true;
   $('pause').textContent=Lg('Пауза','Pause');
   if(eu){
@@ -498,7 +511,7 @@ const TECH=[
   {id:'depot',n:Lg('Тыловые склады','Rear depots'),c:250,e:{pocket:1},p:{gold:-.1},d:Lg('котлы держатся вдвое дольше','encircled troops hold twice as long'),m:Lg('золото −10%','gold −10%')},
   {id:'armor',n:Lg('Броня','Armor'),c:450,e:{arrow:.4},p:{flow:-.2},d:Lg('стрелки прорываются быстрее','arrow attacks break through faster'),m:Lg('войска медленнее идут к фронту','troops reach the front slower')}];
 function ensureP(p){if(!p.tOwn)p.tOwn=[];if(!p.tOn)p.tOn=[];if(!p.tCd)p.tCd={};if(!p.alloc)p.alloc=[33,33,34];
-  if(!p.marks)p.marks=[];if(!p.costArt)p.costArt=120}
+  if(!p.marks)p.marks=[];if(!p.costArt)p.costArt=120;if(!p.trib)p.trib=[]}
 const penMul=p=>Math.max(.15,Math.min(1.3,1.5-cpow(p)*.2));   // мало городов — изучения сильнее тормозят прирост
 const eqK=p=>.5+(p.alloc?p.alloc[0]:33)/66;                   // экипировка: насколько работают изучения
 const buildT=p=>Math.round(3+14*(1-(p.alloc?p.alloc[1]:33)/100)**2);
@@ -562,8 +575,122 @@ const wk=(a,b)=>a<b?a+','+b:b+','+a;
 const atWar=(a,b)=>a>=0&&b>=0&&a!==b&&warS[wk(a,b)]!==undefined;
 const atPeace=(a,b)=>a>=0&&b>=0&&a!==b&&!atWar(a,b);
 function declareWar(a,b){
-  if(a===b||a<0||b<0||atWar(a,b)||!P[b].alive||!P[a].alive)return false;warS[wk(a,b)]=clock;
+  if(a===b||a<0||b<0||atWar(a,b)||!P[b].alive||!P[a].alive)return false;
+  if(lordOf(a)===b){free(a);warS[wk(a,b)]=clock;delete cease[wk(a,b)];   // восстание марионетки
+    addLog(a===0?Lg(`Вы восстали против ${nmQ(b)}`,`You rose up against ${nmQ(b)}`):Lg(`${nmQ(a)} восстаёт против ${nmQ(b)}`,`${nmQ(a)} rises up against ${nmQ(b)}`),b===0?'bad':a===0?'':'');syncPuppets();return true}
+  if(lordOf(a)>=0||rootOf(a)===rootOf(b))return false;   // марионетка войн не объявляет, внутри блока не воюют
+  for(const x of bloc(a))for(const y of bloc(b))if(!atWar(x,y)){warS[wk(x,y)]=clock;delete cease[wk(x,y)]}
   if(a===0||b===0)addLog(a===0?Lg(`Вы объявили войну «${P[b].name}»`,`You declared war on ${P[b].name}`):Lg(`«${P[a].name}» объявляет вам войну`,`${P[a].name} declares war on you`),a===0?'':'bad');return true}
+// ---------- блоки, марионетки, договоры ----------
+// марионетка: своей внешней политики нет, воюет с врагами хозяина, платит ему долю золота; хозяин водит её армию
+const lordOf=x=>P[x]&&P[x].lord!==undefined?P[x].lord:-1;
+const rootOf=x=>lordOf(x)>=0?lordOf(x):x;
+const bloc=x=>{const r=rootOf(x),o=[r];P.forEach((p,k)=>{if(p.alive&&k!==r&&p.lord===r)o.push(k)});return o};
+let cease={},offers=[];   // перемирия до момента; договоры, которые ждут ответа игрока
+const FREEZE_T=120,TRIB_T=600,TRIB_PCT=.3,PUP_PCT=.25;
+function free(x){const p=P[x];if(p.lord===undefined)return;delete p.lord;if(p.rgb0){p.rgb=p.rgb0;p.color=p.color0}}
+function release(o){P.forEach((p,k)=>{if(p.lord===o)free(k)})}
+function endWar(a,b){const A=bloc(a),B=bloc(b);
+  for(const x of A)for(const y of B)delete warS[wk(x,y)];
+  attacks=attacks.filter(at=>{const hit=(A.includes(at.a)&&B.includes(at.t))||(B.includes(at.a)&&A.includes(at.t));   // стрелки сами встанут на мирной земле
+    if(hit)deposit(at.a,backOf(at),endCell(at));return!hit})}
+function makePuppet(x,m){const p=P[x];
+  release(x);endWar(x,m);   // цепочек нет: свои марионетки отпускаются
+  p.lord=m;if(!p.rgb0){p.rgb0=p.rgb;p.color0=p.color}
+  p.rgb=p.rgb0.map((v,i)=>Math.round(v*.45+P[m].rgb[i]*.55));p.color='#'+p.rgb.map(v=>v.toString(16).padStart(2,'0')).join('');
+  syncPuppets()}
+// марионетка втягивается в войны хозяина и не воюет со своим блоком
+function syncPuppets(){
+  P.forEach((p,x)=>{if(!p.alive||lordOf(x)<0)return;const m=p.lord;
+    if(!P[m].alive){free(x);return}
+    for(const k in warS){const q=k.split(',').map(Number);if(q[0]!==x&&q[1]!==x)continue;const y=q[0]===x?q[1]:q[0];if(rootOf(y)===m)delete warS[k]}
+    for(const k in warS){const q=k.split(',').map(Number);if(q[0]!==m&&q[1]!==m)continue;const y=q[0]===m?q[1]:q[0];
+      if(rootOf(y)!==m&&!atWar(x,y)&&!cease[wk(x,y)])warS[wk(x,y)]=warS[k]}})}
+// марионетка, которой плохо или чей хозяин ослаб, может восстать
+function puppetRevolts(){
+  P.forEach((p,x)=>{if(!p.alive||lordOf(x)<0||(x===0&&!noEnd.coup))return;const L=P[p.lord];
+    if(((p.wr||0)>70||(L.wr||0)>80||L.troops<p.troops*.8)&&Math.random()<.03)declareWar(x,p.lord)})}
+function stripCells(a,b){   // приграничная полоса b вдоль земли a, без столицы
+  const d=new Int16Array(N).fill(-1),q=[];
+  for(let i=0;i<N;i++)if(own[i]===b&&adjTo(i,a)){d[i]=0;q.push(i)}
+  for(let h=0;h<q.length;h++){const v=q[h];if(d[v]>=3*K)continue;
+    for(let k=0;k<4;k++){const j=NB[v*4+k];if(j>=0&&own[j]===b&&d[j]<0){d[j]=d[v]+1;q.push(j)}}}
+  return q.filter(i=>i!==P[b].cap)}
+function treatyErr(a,b,T){const war=atWar(a,b);
+  if(!P[a].alive||!P[b].alive)return Lg('Страны больше нет','That country is gone');
+  if(rootOf(a)===rootOf(b))return Lg('Внутри своего блока договоров нет','No treaties inside your own bloc');
+  if(lordOf(a)>=0)return Lg('У марионетки нет своей политики','A puppet has no foreign policy');
+  if(lordOf(b)>=0)return Lg('Договор заключают с её хозяином','Negotiate with its overlord');
+  if(T.pupThem&&T.pupMe)return Lg('Марионеткой становится кто-то один','Only one side can become a puppet');
+  if(T.tribThem&&T.tribMe)return Lg('Дань платит кто-то один','Only one side can pay tribute');
+  if(T.freeze&&!war)return Lg('Перемирие бывает только на войне','A ceasefire needs a war');
+  if(T.freeze&&(T.pupThem||T.pupMe))return Lg('Марионетка и перемирие несовместимы','Puppet and ceasefire do not mix');
+  if(T.ult&&war)return Lg('Ультиматум ставят в мирное время','Ultimatums are for peacetime');
+  if(T.strip&&!stripCells(a,b).length)return Lg('Нет общей границы','No shared border');
+  if(!war&&!(T.pupThem||T.pupMe||T.strip||T.tribThem||T.tribMe))return Lg('Выберите хотя бы один пункт','Pick at least one term');
+  return''}
+const strOf=x=>bloc(x).reduce((s,k)=>s+P[k].troops*(k===rootOf(x)?1:.5),0)*(1-(P[x].wr||0)/150);
+// насколько договор выгоден получателю b; принимает, если ≥ 0
+function treatyScore(a,b,T){const war=atWar(a,b),r=Math.max(.05,strOf(a)/Math.max(1,strOf(b)));let v=0;
+  if(T.pupThem)v-=100;if(T.pupMe)v+=70;
+  if(T.strip)v-=25+60*stripCells(a,b).length/Math.max(1,P[b].cells);
+  if(T.tribThem)v-=20;if(T.tribMe)v+=20;
+  if(war)v+=(P[b].wr||0)*.6-20-(T.freeze?8:0)+45*Math.log2(r);   // устал или проигрывает — соглашается
+  else v+=T.ult?35*Math.log2(r)-15:-15;                          // в мирное время без угрозы менять ничего не хочет
+  return v-Math.min(30,(P[b].hate[a]||0)*.1)}
+const nmQ=x=>`«${P[x].name}»`;
+function treatyText(a,b,T){const r=[],war=atWar(a,b);
+  if(war)r.push(T.freeze?Lg(`Перемирие на ${FREEZE_T/60} мин, потом война продолжается`,`Ceasefire for ${FREEZE_T/60} min, then the war resumes`):Lg('Война заканчивается','The war ends'));
+  if(T.pupThem)r.push(Lg(`${nmQ(b)} становится марионеткой ${nmQ(a)}`,`${nmQ(b)} becomes a puppet of ${nmQ(a)}`));
+  if(T.pupMe)r.push(Lg(`${nmQ(a)} становится марионеткой ${nmQ(b)}`,`${nmQ(a)} becomes a puppet of ${nmQ(b)}`));
+  if(T.strip)r.push(Lg(`${nmQ(b)} отдаёт ${nmQ(a)} приграничную полосу, ${stripCells(a,b).length} кл.`,`${nmQ(b)} cedes a border strip to ${nmQ(a)}, ${stripCells(a,b).length} tiles`));
+  if(T.tribThem)r.push(Lg(`${nmQ(b)} платит ${nmQ(a)} ${TRIB_PCT*100}% золота ${TRIB_T/60} мин`,`${nmQ(b)} pays ${nmQ(a)} ${TRIB_PCT*100}% of gold for ${TRIB_T/60} min`));
+  if(T.tribMe)r.push(Lg(`${nmQ(a)} платит ${nmQ(b)} ${TRIB_PCT*100}% золота ${TRIB_T/60} мин`,`${nmQ(a)} pays ${nmQ(b)} ${TRIB_PCT*100}% of gold for ${TRIB_T/60} min`));
+  if(T.ult)r.push(Lg('Отказ означает войну','Refusal means war'));
+  return r}
+function applyTreaty(a,b,T){
+  if(atWar(a,b)){endWar(a,b);if(T.freeze)for(const x of bloc(a))for(const y of bloc(b))cease[wk(x,y)]=clock+FREEZE_T}
+  if(T.strip){let mv=0;for(const i of stripCells(a,b)){mv+=tr[i];tr[i]=0;conquer(i,a)}deposit(b,mv,P[b].cap)}
+  if(T.tribThem)P[b].trib.push({to:a,until:clock+TRIB_T});
+  if(T.tribMe)P[a].trib.push({to:b,until:clock+TRIB_T});
+  if(T.pupThem)makePuppet(b,a);
+  if(T.pupMe)makePuppet(a,b);
+  syncPuppets();
+  if(a===0||b===0)addLog(Lg(`Договор с ${nmQ(a===0?b:a)}: `,`Treaty with ${nmQ(a===0?b:a)}: `)+treatyText(a,b,T).filter(t=>!/Отказ|Refusal/.test(t)).join('; ').toLowerCase(),'good');
+  else if(T.pupThem||T.pupMe)addLog(Lg(`${nmQ(T.pupThem?b:a)} стала марионеткой ${nmQ(T.pupThem?a:b)}`,`${nmQ(T.pupThem?b:a)} became a puppet of ${nmQ(T.pupThem?a:b)}`))}
+// бот решает сам; игроку договор приходит окном
+function proposeTreaty(a,b,T){
+  if(b===0&&!noEnd.coup){if(offers.some(o=>o.a===a)||offers.length>=2)return false;offers.push({a,T,t0:clock});return true}
+  const ok=treatyScore(a,b,T)+(Math.random()-.5)*16>=0;
+  if(ok)applyTreaty(a,b,T);else if(T.ult)declareWar(a,b);
+  return ok}
+function answerOffer(yes){const o=offers.shift();if(!o)return;
+  if(yes&&!treatyErr(o.a,0,o.T))applyTreaty(o.a,0,o.T);
+  else{addLog(Lg(`Вы отклонили договор ${nmQ(o.a)}`,`You declined the treaty from ${nmQ(o.a)}`),'');if(o.T.ult)declareWar(o.a,0)}
+  ui()}
+function botTreaty(b){const p=P[b];if(lordOf(b)>=0||(p.trCd||0)>clock)return;
+  let e=-1,T=null;const foes=[];
+  for(const k in warS){const q=k.split(',').map(Number);if(q[0]!==b&&q[1]!==b)continue;const y=q[0]===b?q[1]:q[0];if(lordOf(y)<0)foes.push(y)}
+  if(foes.length){e=rp(foes);const r=strOf(b)/Math.max(1,strOf(e));
+    if((p.wr||0)>60||r<.5)T=r<.3&&(p.wr||0)>70?{pupMe:1}:r<.6?{tribMe:1}:Math.random()<.5?{freeze:1}:{};
+    else if(r>2.5&&(P[e].wr||0)>50)T=r>4?{pupThem:1}:{strip:1,tribThem:1}}
+  else if(Math.random()<.15){   // мирное время: сильный давит на слабого соседа
+    const nb=new Set();for(let i=0;i<N;i++){if(own[i]!==b)continue;for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&own[j]>=0&&own[j]!==b)nb.add(own[j])}}
+    for(const x of nb){if(lordOf(x)>=0||rootOf(x)===b)continue;const r=strOf(b)/Math.max(1,strOf(x));
+      if(r>4){e=x;T=r>8?{pupThem:1,ult:1}:{strip:1,ult:1};break}}}
+  if(!T||e<0||treatyErr(b,e,T))return;
+  p.trCd=clock+30;proposeTreaty(b,e,T)}
+// золото: марионетка отдаёт хозяину долю, дань — на срок
+function payGold(){const add=P.map(()=>0);
+  P.forEach((p,a)=>{if(!p.alive)return;const g=p.inc[1]+p.tradeG;let left=g;
+    p.trib=(p.trib||[]).filter(t=>t.until>clock&&P[t.to].alive);
+    const pay=(to,pct)=>{const v=Math.min(left,g*pct);left-=v;add[to]+=v};
+    if(lordOf(a)>=0)pay(p.lord,PUP_PCT);for(const t of p.trib)pay(t.to,TRIB_PCT);
+    add[a]+=left});
+  P.forEach((p,a)=>{p.gold+=add[a];p.gNet=add[a]})}
+function stepCease(){for(const k in cease){if(cease[k]>clock)continue;delete cease[k];
+  const[a,b]=k.split(',').map(Number);if(!P[a].alive||!P[b].alive||rootOf(a)===rootOf(b)||atWar(a,b))continue;
+  warS[k]=clock;if(a===0||b===0)addLog(Lg(`Перемирие с ${nmQ(a===0?b:a)} кончилось, война продолжается`,`Ceasefire with ${nmQ(a===0?b:a)} is over, the war resumes`),'bad')}}
 const enemiesOf=x=>{let n=0;for(const k in warS){const q=k.split(',');if(+q[0]===x||+q[1]===x)n++}return n};
 
 // оборона клетки: столица и форты
@@ -623,6 +750,7 @@ function refresh(){
     for(let i=0;i<N;i++){const o=own[i];if(o<0)continue;
       for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&own[j]>=0&&own[j]!==o&&!atPeace(o,own[j])){fd[i]=0;fq[ft++]=i;break}}}
     while(fh<ft){const v=fq[fh++];for(let k=0;k<4;k++){const j=NB[v*4+k];if(j>=0&&own[j]===own[v]&&fd[j]<0){fd[j]=fd[v]+1;fq[ft++]=j}}}}
+  syncPuppets();puppetRevolts();
   worldLife();
   for(const p of P){ensureP(p);calcMods(p)}
   // стены: чинятся, если их не бьют и есть снабжение; siege — сколько участков кольца повреждено
@@ -698,7 +826,7 @@ function capitulate(o,a){
   let n=0,c=0;for(let i=0;i<N;i++)if(own[i]===o){own[i]=a;n++;since[i]=clock;tr[i]*=.5;prog[i]=0;wall[i]=0;if(bld[i]===1)c++}
   P[a].cells+=n;P[a].cities+=c;P[o].cells=0;P[o].cities=0;P[o].alive=false;
   P[a].gold+=P[o].gold;P[o].troops=0;P[o].gold=0;P[a].wr=Math.max(0,(P[a].wr||0)-20);syncT();
-  attacks=attacks.filter(x=>x.a!==o);
+  attacks=attacks.filter(x=>x.a!==o);release(o);free(o);
   for(const k in warS){const q=k.split(',');if(+q[0]===o||+q[1]===o)delete warS[k]}
   addLog(Lg(`${P[o].name}: столица пала, капитуляция перед «${P[a].name}»`,`${P[o].name}: capital fallen, surrendered to ${P[a].name}`),a===0?'good':o===0?'bad':'');
 }
@@ -859,7 +987,7 @@ function tick(){
   syncT();
   for(const p of P)p.gr=p.alive?Math.max(0,Math.min(cap(p)-p.troops,growth(p))):0;
   spawn();flow();front();
-  for(const p of P){p.gold+=p.inc[1]+p.tradeG;p.iron+=p.inc[3]}
+  payGold();for(const p of P)p.iron+=p.inc[3];stepCease();
   for(let n=attacks.length-1;n>=0;n--){
     const at=attacks[n];if(!at)continue;const A=P[at.a];
     if(!A.alive){attacks.splice(n,1);continue}
@@ -868,12 +996,12 @@ function tick(){
   }
   stepShips();stepSites();stepArt();
   syncT();
-  P.forEach((p,o)=>{if(!p.alive||p.cells>0)return;p.alive=false;p.troops=0;
+  P.forEach((p,o)=>{if(!p.alive||p.cells>0)return;p.alive=false;p.troops=0;release(o);free(o);
     attacks=attacks.filter(x=>x.a!==o);for(const k in warS){const q=k.split(',');if(+q[0]===o||+q[1]===o)delete warS[k]}});
   weariness();
   for(let b=noEnd.coup?0:1;b<P.length;b++)if(P[b].alive&&Math.random()<.08)botThink(b);
   if(!P[0].alive&&!noEnd.lost){noEnd.lost=true;setMsg(Lg('Ваша страна пала — мир живёт дальше','Your country has fallen; the world goes on'),'err');addLog(Lg('Ваша страна пала. Можно смотреть дальше или начать заново','Your country has fallen. Keep watching or start over'),'bad')}
-  else if(P[0].alive&&!noEnd.coup&&!noEnd.won&&P.filter(p=>p.alive).length===1){noEnd.won=true;addLog(Lg('Вы объединили континент. Мир живёт дальше','You united the continent. The world goes on'),'good')}
+  else if(P[0].alive&&!noEnd.coup&&!noEnd.won&&P.every((p,k)=>!p.alive||rootOf(k)===0)){noEnd.won=true;addLog(Lg('Вы объединили континент. Мир живёт дальше','You united the continent. The world goes on'),'good')}
 }
 
 // ---------- живой мир: доход, торговля, рост городов, дороги ----------
@@ -956,11 +1084,11 @@ function stepSites(){for(let n=sites.length-1;n>=0;n--){const s=sites[n];
 
 // ---------- боты ----------
 function botWar(b){
-  const p=P[b];if(clock<60)return;
+  const p=P[b];if(clock<60||lordOf(b)>=0)return;
   if(enemiesOf(b)>=(p.troops>3000?2:1)||Math.random()>.06*Math.min(1,8/Math.max(1,P.length-1)))return;   // много стран — каждая объявляет войны реже
   const nb=new Set();for(let i=0;i<N;i++){if(own[i]!==b)continue;for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&own[j]>=0&&own[j]!==b)nb.add(own[j])}}
   let best=-1,bs=-1e9;const myD=p.troops/Math.max(1,p.cells);
-  for(const x of nb){if(!P[x].alive||enemiesOf(x)>=2)continue;   // на того, с кем уже воюют двое, не лезем
+  for(const x of nb){if(!P[x].alive||enemiesOf(x)>=2||rootOf(x)===rootOf(b)||cease[wk(b,x)])continue;   // на того, с кем уже воюют двое, не лезем
     const sc=myD/Math.max(.01,P[x].troops/Math.max(1,P[x].cells))*(.7+Math.random()*.6)+(p.hate[x]||0)*.01-enemiesOf(x)*1.2-(x===0?.25:0)-.25;   // с соседом торгуем — воевать невыгодно
     if(sc>bs){bs=sc;best=x}}
   if(best>=0&&bs>.9)declareWar(b,best);
@@ -1042,7 +1170,7 @@ function botThink(b){
   const p=P[b];ensureP(p);
   if(p.rebel){rebelThink(b);return}
   botTech(b);botArt(b);
-  botWar(b);
+  botWar(b);if(Math.random()<.15)botTreaty(b);
   if(Math.random()<.3&&botBreakout(b))return;
   // стройка
   const myQ=quarries.filter(q=>own[q]===b).length;
@@ -1331,7 +1459,7 @@ function ui(){
   const me=P[0],c=cap(me),fill=me.troops/c;
   $("sArmy").textContent=`${Math.round(me.troops)} / ${Math.round(c)}`;
   $('sInc').textContent=`+${(Math.max(0,Math.min(c-me.troops,growth(me)))*1000/TICK).toFixed(1)}/`+Lg('с','s');
-  $('sGold').textContent=`${Math.floor(me.gold)}  +${(goldInc(0)*1000/TICK).toFixed(1)}/`+Lg('с','s');
+  $('sGold').textContent=`${Math.floor(me.gold)}  +${((me.gNet??goldInc(0))*1000/TICK).toFixed(1)}/`+Lg('с','s');
   $('sFood').textContent=`+${Math.round((foodMul(me)-1)*100)}%`+Lg(' к приросту',' growth');
   $('sIron').textContent=`${Math.floor(me.iron)}  +${(me.inc[3]*1000/TICK).toFixed(1)}/`+Lg('с','s');
   $('sTrade').textContent=me.trade&&me.trade.length?Lg(`+${(me.tradeG*1000/TICK).toFixed(1)}/с, партнёров ${me.trade.length}`,`+${(me.tradeG*1000/TICK).toFixed(1)}/s, partners ${me.trade.length}`):Lg('нет','none');
@@ -1344,10 +1472,16 @@ function ui(){
   if(!$('hq').hidden)renderHQ();
   $('cCity').textContent=me.costCity;$('cFort').textContent=me.costFort+Lg(' жел.',' iron');$('cQuarry').textContent=me.costQuarry;
   $('lb').innerHTML=P.map((p,i)=>({p,i})).sort((a,b)=>b.p.cells-a.p.cells).map(({p,i})=>
-    `<tr data-i="${i}" class="${p.alive?'':'dead'} ${i===selC?'sel':''}"><td><span class="sw" style="background:${esc(p.color)}"></span>${esc(p.name)}${atWar(0,i)?Lg(' · война',' · war'):''}</td>`+
+    `<tr data-i="${i}" class="${p.alive?'':'dead'} ${i===selC?'sel':''}"><td><span class="sw" style="background:${esc(p.color)}"></span>${esc(p.name)}${atWar(0,i)?Lg(' · война',' · war'):p.lord===0?Lg(' · ваша марионетка',' · your puppet'):lordOf(i)>=0?Lg(' · марионетка',' · puppet'):''}</td>`+
     `<td>${(p.cells/land*100).toFixed(1)}%</td><td>${Math.round(p.troops)}</td></tr>`).join('');
-  if(selC>0){const p=P[selC],w=atWar(0,selC);
-    $('dipl').hidden=!p.alive;$('dName').textContent=w?Lg('Война до падения столицы','War until a capital falls'):Lg('Не воюем','Not at war');$('peace').hidden=w}
+  if(selC>0){const p=P[selC],w=atWar(0,selC),cz=cease[wk(0,selC)]||0,myL=lordOf(0);
+    $('dipl').hidden=!p.alive;
+    $('dName').textContent=w?Lg('Война','War'):cz>clock?Lg(`Перемирие ${Math.ceil(cz-clock)} с`,`Ceasefire ${Math.ceil(cz-clock)} s`):p.lord===0?Lg('Ваша марионетка','Your puppet'):
+      myL===selC?Lg('Ваш хозяин','Your overlord'):lordOf(selC)>=0?Lg(`Марионетка ${nmQ(p.lord)}`,`Puppet of ${nmQ(p.lord)}`):Lg('Не воюем','Not at war');
+    $('peace').hidden=w||p.lord===0||(myL>=0&&myL!==selC);$('peace').textContent=myL===selC?Lg('Восстать','Rise up'):Lg('Объявить войну','Declare war');
+    $('treBtn').hidden=myL>=0||lordOf(selC)>=0||p.lord===0}
+  if(!$('tre').hidden&&(selC<1||!P[selC].alive||$('treBtn').hidden))closeTre();
+  renderOffer()
 }
 let msgT;
 function setMsg(t,cls){const m=$('msg');m.textContent=t;m.className=cls||'';clearTimeout(msgT);
@@ -1366,8 +1500,22 @@ function artTap(i){
   if(!bs.some(b=>inRange(b,tx,ty))){setMsg(Lg('Вне досягаемости','Out of range'),'err');return}
   if(!sh){const o=own[i];if(o>=0&&o!==0&&!atWar(0,o))declareWar(0,o)}
   me.marks.push({x:tx,y:ty,s:sh?sh.id:0});setMsg('');draw()}
-function openHQ(){$('hq').hidden=false;hqSig='';setHQTab(hqTab);syncAlloc()}
+function openHQ(){closeTre();$('hq').hidden=false;hqSig='';setHQTab(hqTab);syncAlloc()}
 function closeHQ(){$('hq').hidden=true}
+const TERM_UI=[['pupThem',Lg('Они становятся моей марионеткой','They become my puppet')],['pupMe',Lg('Я становлюсь их марионеткой','I become their puppet')],
+  ['strip',Lg('Они отдают приграничную полосу','They cede a border strip')],['tribThem',Lg(`Они платят дань ${TRIB_T/60} мин`,`They pay tribute for ${TRIB_T/60} min`)],
+  ['tribMe',Lg(`Я плачу дань ${TRIB_T/60} мин`,`I pay tribute for ${TRIB_T/60} min`)],['freeze',Lg(`Только перемирие на ${FREEZE_T/60} мин`,`Only a ${FREEZE_T/60}-min ceasefire`)],
+  ['ult',Lg('Ультиматум: отказ означает войну','Ultimatum: refusal means war')]];
+function openTre(){if(selC<1)return;closeHQ();$('tre').hidden=false;
+  const w=atWar(0,selC);$('treT').textContent=Lg('Договор с ','Treaty with ')+nmQ(selC);
+  $('treSt').textContent=w?Lg('Принятый договор заканчивает войну. Без пунктов это просто мир','An accepted treaty ends the war. With no terms it is plain peace'):'';
+  $('treTerms').innerHTML=TERM_UI.filter(([k])=>w?k!=='ult':k!=='freeze').map(([k,t])=>`<label class="chk"><input type="checkbox" data-k="${k}">${t}</label>`).join('')}
+function closeTre(){$('tre').hidden=true}
+function renderOffer(){const o=offers[0];
+  if(o&&clock-o.t0>30)return answerOffer(false);   // молчание — отказ
+  $('offer').hidden=!o;if(!o)return;
+  $('ofT').textContent=Lg('Договор от ','Treaty from ')+nmQ(o.a)+(o.T.ult?Lg(' · ультиматум',' · ultimatum'):'')+` · ${Math.max(0,Math.ceil(30-(clock-o.t0)))} `+Lg('с','s');
+  $('ofList').innerHTML=treatyText(o.a,0,o.T).map(t=>`<li>${esc(t)}</li>`).join('')}
 function setHQTab(t){hqTab=t;for(const x of $('hqTabs').children)x.classList.toggle('on',+x.dataset.t===t);
   $('hqTech').hidden=t!==0;$('hqAlloc').hidden=t!==1;hqSig='';renderHQ()}
 function renderHQ(){
@@ -1410,7 +1558,7 @@ function tapCell(i){
   if(i<0||!terr[i]||own[i]===0)return;
   const t=own[i];
   if(!frontier(0,t).length){setMsg(Lg('Нет общей границы','No shared border'),'err');return}
-  if(t>=0&&!atWar(0,t))declareWar(0,t);
+  if(t>=0&&!atWar(0,t)&&!declareWar(0,t)){setMsg(lordOf(0)>=0?Lg('Марионетка не объявляет войн','A puppet cannot declare war'):Lg('Со своим блоком не воюют','Not against your own bloc'),'err');return}
   launch(0,t,P[0].troops*$('pct').value/100);setMsg('');
 }
 const ptrs=new Map();let pinch=null;
@@ -1421,7 +1569,7 @@ cv.addEventListener('pointerdown',e=>{
   if(mode==='edit'){const pan=ED.tool==='h';drag={id:e.pointerId,edit:!pan,moved:false,sx:c.mx,sy:c.my,fromOwn:!pan};
     if(ED.tool==='s')edStart(c);else if(!pan)edPaint(c);draw();return}
   if(mode!=='game'){drag=null;return}
-  drag={id:e.pointerId,x0:c.x,y0:c.y,start:c.i,fromOwn:!over&&!paused&&!noEnd.coup&&c.i>=0&&own[c.i]===0&&!buildMode&&umode!==2,mx:c.mx,my:c.my,moved:false,sx:c.mx,sy:c.my};
+  drag={id:e.pointerId,x0:c.x,y0:c.y,start:c.i,fromOwn:!over&&!paused&&!noEnd.coup&&c.i>=0&&(own[c.i]===0||(umode===0&&P[own[c.i]]&&P[own[c.i]].lord===0))&&!buildMode&&umode!==2,who:c.i>=0?own[c.i]:-1,mx:c.mx,my:c.my,moved:false,sx:c.mx,sy:c.my};
 });
 cv.addEventListener('pointermove',e=>{
   const pr=ptrs.get(e.pointerId);if(!pr)return;
@@ -1451,8 +1599,8 @@ cv.addEventListener('pointerup',e=>{
     if(launchShip(0,d.x0,d.y0,tx,ty,P[0].troops*$('pct').value/100))setMsg(Lg('Флот вышел','Fleet launched'));else setMsg(Lg('Нужен свой форт у моря','Need your own coastal fort'),'err');draw();return}
   {const l=Math.hypot(tx-d.x0,ty-d.y0)||1;   // стрелка в чужую страну — объявление войны первой на пути
     for(let st=1;st<=l;st+=.5){const x=Math.floor(d.x0+.5+(tx-d.x0)/l*st),y=Math.floor(d.y0+.5+(ty-d.y0)/l*st),o=own[y*W+x];
-      if(o>=0&&o!==0){if(!atWar(0,o))declareWar(0,o);break}}}
-  launchDir(0,d.x0,d.y0,tx,ty,P[0].troops*$('pct').value/100);setMsg('');draw();
+      if(o>=0&&rootOf(o)!==rootOf(d.who)){if(!atWar(d.who,o)&&!declareWar(0,o)){setMsg(lordOf(0)>=0?Lg('Марионетка не объявляет войн','A puppet cannot declare war'):Lg('С ней сейчас нельзя воевать','Cannot attack it now'),'err');draw();return}break}}}
+  launchDir(d.who,d.x0,d.y0,tx,ty,P[d.who].troops*$('pct').value/100);setMsg('');draw();
 });
 cv.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);pinch=null;drag=null;draw()});
 window.addEventListener('keydown',e=>{const r=cv.getBoundingClientRect();
@@ -1466,6 +1614,18 @@ window.addEventListener('keydown',e=>{const r=cv.getBoundingClientRect();
 $('dens').addEventListener('change',e=>{showDens=e.target.checked;draw()});
 $('umode').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setUMode(+b.dataset.u)});
 $('hqClose').addEventListener('click',closeHQ);
+$('treBtn').addEventListener('click',openTre);
+$('treClose').addEventListener('click',closeTre);
+$('treSend').addEventListener('click',()=>{if(selC<1||noEnd.coup)return;const T={};
+  for(const c of $('treTerms').querySelectorAll('input:checked'))T[c.dataset.k]=1;
+  const err=treatyErr(0,selC,T);if(err){setMsg(err,'err');return}
+  const cd=(P[0].trTo||{})[selC]||0;if(cd>clock){setMsg(Lg(`Ответ уже дан, ещё ${Math.ceil(cd-clock)} с`,`They already answered, ${Math.ceil(cd-clock)} s more`),'err');return}
+  (P[0].trTo=P[0].trTo||{})[selC]=clock+10;
+  const b=selC,ok=proposeTreaty(0,b,T);
+  if(!ok)addLog(Lg(`${nmQ(b)} отклоняет договор`,`${nmQ(b)} declines the treaty`)+(T.ult?Lg(': война',': war'):''),'bad');
+  closeTre();ui();draw()});
+$('ofYes').addEventListener('click',()=>{answerOffer(true);draw()});
+$('ofNo').addEventListener('click',()=>{answerOffer(false);draw()});
 $('hqTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setHQTab(+b.dataset.t)});
 $('hqTech').addEventListener('click',e=>{const b=e.target.closest('[data-buy]');if(b&&buyTech(0,b.dataset.buy)){addLog(Lg('Изучено: ','Researched: ')+TECH.find(t=>t.id===b.dataset.buy).n,'good');hqSig='';renderHQ();ui()}});
 $('hqTech').addEventListener('change',e=>{const c=e.target.closest('[data-tog]');if(!c)return;if(!toggleTech(0,c.dataset.tog))c.checked=!c.checked;hqSig='';renderHQ();ui()});
@@ -1516,7 +1676,7 @@ async function packState(){
     else u=new Uint8Array(a.buffer.slice(a.byteOffset,a.byteOffset+a.byteLength));
     offs[k]=[n,u.length];parts.push(u);n+=u.length}
   const all=new Uint8Array(n);let o=0;for(const u of parts){all.set(u,o);o+=u.length}
-  const meta=JSON.stringify({v:1,W,H,clock,tk,lifeT,logArr,noEnd,warS,forts,quarries,qv:[...qv.entries()],attacks,ships,P,GO,wallLog,offs,speed,sites,shells,artCd,fortHits,shipId});   // снимок до await
+  const meta=JSON.stringify({v:1,W,H,clock,tk,lifeT,logArr,noEnd,warS,forts,quarries,qv:[...qv.entries()],attacks,ships,P,GO,cease,wallLog,offs,speed,sites,shells,artCd,fortHits,shipId});   // снимок до await
   const z=await gz(all,true);
   return '{"m":'+meta+',"z":'+(z?1:0)+',"b":"'+b64e(z||all)+'"}';
 }
@@ -1537,7 +1697,7 @@ async function unpackState(str){
   for(const sh of ships)if(!sh.id)sh.id=++shipId;P.forEach(ensureP);
   qv=new Map(m.qv);buildNB();land=0;for(let i=0;i<N;i++)if(terr[i])land++;
   over=false;paused=false;buildMode=0;selC=-1;setBuildMode(0);$('dipl').hidden=true;$('pause').textContent=Lg('Пауза','Pause');
-  depotT={};dist.fill(-1);refresh();buildRoads();renderLog();
+  depotT={};cease=m.cease||{};offers=[];$('tre').hidden=$('offer').hidden=true;dist.fill(-1);refresh();buildRoads();renderLog();
 }
 
 // ---------- слоты ----------
