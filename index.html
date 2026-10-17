@@ -149,6 +149,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:24px}
         <tr><td>Железо</td><td id="sIron">0</td></tr>
         <tr><td>Торговля</td><td id="sTrade">0</td></tr>
         <tr><td>Территория</td><td id="sTer">0</td></tr>
+        <tr><td>Усталость</td><td id="sWr">0</td></tr>
       </table>
       <div class="bar"><i id="armyBar"></i><b></b></div>
     </div>
@@ -251,7 +252,7 @@ const Lg=(ru,en)=>LANG==='en'?en:ru;
 (function(){if(LANG!=='en')return;document.documentElement.lang='en';document.title='Rubilka';
   const D={'Войска':'Troops','Флот':'Fleet','Артиллерия':'Artillery','Столица':'Capital','Закрыть':'Close','Изучения':'Research',
   'Распределение':'Budget','Экипировка':'Equipment','Стройка':'Construction','Продажа за границу':'Exports','Армия':'Army',
-  'Прирост':'Growth','Золото':'Gold','Еда':'Food','Железо':'Iron','Торговля':'Trade','Территория':'Territory','Сила атаки':'Attack size',
+  'Прирост':'Growth','Золото':'Gold','Еда':'Food','Железо':'Iron','Торговля':'Trade','Территория':'Territory','Усталость':'War weariness','Сила атаки':'Attack size',
   'Отступить':'Retreat','Город':'City','Форт':'Fort','Добыча':'Mine','Батарея':'Battery','Ресурсы':'Resources','Страна':'Country',
   'Земля':'Land','Война':'War','Объявить войну':'Declare war','Плотность войск':'Troop density','Пауза':'Pause','Сохранить':'Save','Меню':'Menu','Равнина':'Plains',
   'Лес':'Forest','Горы':'Mountains','Вода':'Water','Старт':'Start','Рука':'Pan','Кисть':'Brush','Случайная основа':'Random base',
@@ -416,6 +417,7 @@ function hitWall(i,dmg){
   if(wall[i]<=0){wall[i]=0;if(o===0||(attackerOf===0))addLog(o===0?Lg('Стены столицы пробиты','Your capital walls are breached'):Lg(`Пробиты стены столицы «${P[o].name}»`,`${P[o].name} capital walls breached`),o===0?'bad':'good')}
 }
 let attackerOf=-1;
+const die=(o,n)=>{if(o>=0&&n>0)P[o].dead=(P[o].dead||0)+n};   // погибшие за тик: из них копится усталость
 // ---------- войска живут в клетках ----------
 function syncT(){for(const p of P)p.troops=0;for(let i=0;i<N;i++)if(own[i]>=0)P[own[i]].troops+=tr[i]}
 const nbOwn=(i,t)=>{for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&terr[j]&&own[j]===t)return true}return false};
@@ -449,7 +451,7 @@ function spawn(){
 function flow(){
   dlt.fill(0);
   for(let i=0;i<N;i++){const o=own[i];if(o<0||tr[i]<=0)continue;
-    if(dist[i]<0){tr[i]*=.992;continue}
+    if(dist[i]<0){die(o,tr[i]*.008);tr[i]*=.992;continue}
     const f=fd[i];
     if(f>0){let n=0;const nb=[];for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&own[j]===o&&fd[j]>=0&&fd[j]<f)nb[n++]=j}
       if(n){const m=tr[i]*(urban[i]?FLOW*.15:FLOW)*Math.max(.2,1+MD(P[o]).flow);dlt[i]-=m;for(let k=0;k<n;k++)dlt[nb[k]]+=m/n}}   // делим поровну — без полос
@@ -468,7 +470,7 @@ function front(){
     if(prog[j]<1){prog[j]*=.95;continue}
     const i=att[j],a=own[i],b=own[j];prog[j]=0;
     if(a<0||b<0||a===b||(lostTick[b]||0)>=Math.max(4*K,P[b].cells*.004))continue;
-    const sB=costOf(j);tr[i]-=Math.min(tr[i]*.6,sB*.6);
+    const sB=costOf(j),l=Math.min(tr[i]*.6,sB*.6);tr[i]-=l;die(a,l);
     lostTick[b]=(lostTick[b]||0)+1;conquer(j,a);
     const mv=tr[i]*.5;tr[i]-=mv;tr[j]+=mv;
   }
@@ -478,12 +480,13 @@ const FLOW=.25,PUSH=1.35;
 // экономика: прирост как проценты на вклад — максимум около половины лимита
 const cpow=p=>p.cpow!==undefined?p.cpow:p.cities;
 const cap=p=>30+p.cells*3/A+cpow(p)*12;
-const growth=p=>{const c=cap(p),t=p.troops;return (.1+p.cells*.002/A+cpow(p)*.012+t*.018*Math.max(0,1-t/c))*foodMul(p)*Math.max(.3,1+MD(p).spawn)};
+const growth=p=>{const c=cap(p),t=p.troops;return (.1+p.cells*.002/A+cpow(p)*.012+t*.018*Math.max(0,1-t/c))*foodMul(p)*Math.max(.3,1+MD(p).spawn)*wrMul(p)};
 // довоз: чем ближе карьер к своему городу/столице по своей земле, тем больше; в котле — ноль
 function logi(q){if(own[q]<0||dist[q]<0)return 0;if(urban[q])return 1.6;return Math.max(.25,1.3-dist[q]/(25*K))}
 const qIncome=q=>(.1+.5*qv.get(q).v)*logi(q);   // добыча за тик
 function incomeOf(a){const r=[0,0,0,0];for(const q of quarries)if(own[q]===a)r[qv.get(q).t]+=qIncome(q);return r}
 function goldInc(a){return P[a].inc[1]+P[a].tradeG}
+const wrMul=p=>Math.max(.4,1-Math.max(0,(p.wr||0)-30)*.0085);   // уставшие не идут служить
 const foodMul=p=>1+Math.min(.6,p.inc[2]*2);   // еда ускоряет прирост армии
 const ironMul=p=>1+Math.min(1,p.inc[3]*3);     // железо — быстрее чинятся стены
 // ---------- изучения: небольшой плюс, за который чем-то платишь ----------
@@ -542,14 +545,14 @@ function impact(a,x,y){
   for(let dy=-Ri;dy<=Ri;dy++)for(let dx=-Ri;dx<=Ri;dx++){const xx=x0+dx,yy=y0+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;
     const d2=(xx+.5-x)**2+(yy+.5-y)**2;if(d2>R*R)continue;
     const j=yy*W+xx,o=own[j];if(o<0||o===a||!atWar(a,o))continue;
-    tr[j]*=.6;since[j]=clock;   // выбивает бойцов и окопы
+    die(o,tr[j]*.4);tr[j]*=.6;since[j]=clock;   // выбивает бойцов и окопы
     if(wall[j]>0){attackerOf=a;hitWall(j,90*(1+MD(P[a]).wall))}
     if(d2<=R2){
       if(bld[j]===2){fortHits[j]=(fortHits[j]||0)+1;if(fortHits[j]>=3){bld[j]=0;forts=forts.filter(f=>f!==j);delete fortHits[j];
         if(a===0||o===0)addLog(a===0?Lg(`Форт «${P[o].name}» разрушен артиллерией`,`${P[o].name} fort destroyed by artillery`):Lg('Ваш форт разрушен артиллерией','Your fort was destroyed by artillery'),a===0?'good':'bad')}}
       else if(bld[j]===4){bld[j]=0;delete artCd[j];if(a===0||o===0)addLog(a===0?Lg(`Батарея «${P[o].name}» подавлена`,`${P[o].name} battery silenced`):Lg('Ваша батарея подавлена','Your battery was silenced'),a===0?'good':'bad')}}}
   for(let n=ships.length-1;n>=0;n--){const sh=ships[n];if(sh.a===a||!atWar(a,sh.a))continue;
-    if(Math.hypot(sh.x-x,sh.y-y)<=R*1.2){sh.troops*=.3;if(sh.troops<1){ships.splice(n,1);
+    if(Math.hypot(sh.x-x,sh.y-y)<=R*1.2){die(sh.a,sh.troops*.7);sh.troops*=.3;if(sh.troops<1){ships.splice(n,1);
       if(a===0||sh.a===0)addLog(a===0?Lg(`Флот «${P[sh.a].name}» потоплен артиллерией`,`${P[sh.a].name} fleet sunk by artillery`):Lg('Ваш флот потоплен артиллерией','Your fleet was sunk by artillery'),a===0?'good':'bad')}}}
 }
 const cx_=i=>i%W,cy_=i=>(i/W)|0;
@@ -653,9 +656,9 @@ function renderLog(){
 
 function conquer(i,a){
   const o=own[i];
-  if(o>=0){P[o].cells--;if(bld[i]===1){P[o].cities--;csz[i]=Math.max(1,(csz[i]||1)-1)}P[o].hate[a]=(P[o].hate[a]||0)+1;
+  if(o>=0){P[o].cells--;if(bld[i]===1){P[o].cities--;csz[i]=Math.max(1,(csz[i]||1)-1);P[o].wr=(P[o].wr||0)+3;P[a].wr=Math.max(0,(P[a].wr||0)-4)}P[o].hate[a]=(P[o].hate[a]||0)+1;
     let r=-1;for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&own[j]===o){r=j;break}}
-    if(r>=0)tr[r]+=tr[i]*.4;P[o].troops-=tr[i]*(r>=0?.6:1)}
+    if(r>=0)tr[r]+=tr[i]*.4;P[o].troops-=tr[i]*(r>=0?.6:1);die(o,tr[i]*(r>=0?.6:1))}
   tr[i]=0;prog[i]=0;wall[i]=0;
   own[i]=a;P[a].cells++;cut[i]=0;since[i]=clock;if(bld[i]===1)P[a].cities++;
   if(bld[i]>=10||bld[i]===4){bld[i]=0;delete artCd[i]}   // стройка и батарея при захвате пропадают
@@ -663,10 +666,28 @@ function conquer(i,a){
   if(bld[i]===3&&o>=0&&(o===0||a===0))addLog(a===0?Lg(`Отбит карьер у «${P[o].name}»`,`Mine captured from ${P[o].name}`):Lg(`«${P[a].name}» захватил ваш карьер`,`${P[a].name} captured your mine`),a===0?'good':'bad');
   if(o>=0&&i===P[o].cap)capitulate(o,a);
 }
+// ---------- усталость от войны ----------
+// копится от своих погибших (в долях лимита армии), сама спадает; взятые города её снимают, потерянные — добавляют
+const GOV=Lg(['хунта','директория','временное правительство','военный совет'],['junta','directorate','provisional government','military council']);
+function weariness(){
+  for(let o=0;o<P.length;o++){const p=P[o],d=p.dead||0;p.dead=0;if(!p.alive||p.rebel)continue;
+    p.wr=Math.min(100,(p.wr||0)*.9994+15*d/cap(p));
+    const st=p.wr>=80?2:p.wr>=50?1:0;
+    if(o===0&&!noEnd.coup&&st>(p.wrSt||0))addLog(st===2?Lg('Генералы ропщут из-за потерь. Ещё немного, и будет переворот','The generals are angry about the losses. A coup is close'):Lg('Страна устала от войны: прирост падает, в городах волнения','The country is weary of war: growth falls, cities are restless'),'bad');
+    if(p.wr<(p.wrSt===2?70:40))p.wrSt=st;else p.wrSt=Math.max(p.wrSt||0,st);
+    if(p.wr>=100&&clock-(p.coupT??-999)>90)coup(o)}}   // новой власти дают 90 с удержаться
+function coup(o){
+  const p=P[o],old=p.name;p.base=p.base||old;
+  p.name=`${p.base}: ${rp(GOV)}`;p.wr=35;p.coupT=clock;p.wrSt=0;p.hate={};p.tOn=[];calcMods(p);
+  for(let i=0;i<N;i++)if(own[i]===o)tr[i]*=.8;   // чистки в армии
+  if(o===0&&!noEnd.coup){noEnd.coup=true;setMsg(Lg('Переворот: армия не простила потерь, вас свергли','Coup: the army did not forgive the losses, you are overthrown'),'err');
+    addLog(Lg('Вас свергли. Страной правит новая власть, можно смотреть дальше или начать заново','You were overthrown. A new government rules; keep watching or start over'),'bad')}
+  else addLog(Lg(`Переворот в «${old}»: власть взяла ${p.name.slice(p.base.length+2)}`,`Coup in ${old}: a ${p.name.slice(p.base.length+2)} took power`),P[0].alive&&atWar(0,o)?'good':'');
+}
 function capitulate(o,a){
   let n=0,c=0;for(let i=0;i<N;i++)if(own[i]===o){own[i]=a;n++;since[i]=clock;tr[i]*=.5;prog[i]=0;wall[i]=0;if(bld[i]===1)c++}
   P[a].cells+=n;P[a].cities+=c;P[o].cells=0;P[o].cities=0;P[o].alive=false;
-  P[a].gold+=P[o].gold;P[o].troops=0;P[o].gold=0;syncT();
+  P[a].gold+=P[o].gold;P[o].troops=0;P[o].gold=0;P[a].wr=Math.max(0,(P[a].wr||0)-20);syncT();
   attacks=attacks.filter(x=>x.a!==o);
   for(const k in warS){const q=k.split(',');if(+q[0]===o||+q[1]===o)delete warS[k]}
   addLog(Lg(`${P[o].name}: столица пала, капитуляция перед «${P[a].name}»`,`${P[o].name}: capital fallen, surrendered to ${P[a].name}`),a===0?'good':o===0?'bad':'');
@@ -713,9 +734,9 @@ function takeCell(at,i){
     if(at.wt!==undefined&&at.wt!==i&&wall[at.wt]>0&&own[at.wt]===own[i])i=at.wt;
     at.wtick=tk;at.wt=i;
     const dmg=Math.min(wall[i],Math.max(2,at.troops*.04)*(1+MD(P[at.a]).wall)),l=Math.min(at.troops,dmg*.3);
-    at.troops-=l;at.lost=(at.lost||0)+l;attackerOf=at.a;hitWall(i,dmg);return 2}
+    at.troops-=l;at.lost=(at.lost||0)+l;die(at.a,l*.7);attackerOf=at.a;hitWall(i,dmg);return 2}
   const{def,loss,gar}=lossOf(at,i);if(at.troops<loss+gar)return false;
-  at.troops-=loss+gar;at.lost=(at.lost||0)+loss;
+  at.troops-=loss+gar;at.lost=(at.lost||0)+loss;die(at.a,loss*.7);   // треть раненых вернётся
   if(o0>=0)lostTick[o0]=(lostTick[o0]||0)+1;
   conquer(i,at.a);
   let g=gar;if(o0>=0){g=Math.min(at.troops*.04,2+def*.3);at.troops-=g}   // в клетке остаётся гарнизон
@@ -809,7 +830,7 @@ function stepShips(){
     const i=cy*W+cx;
     if(!terr[i]){
       for(const g of guns){const o=own[g];if(o<0||o===sh.a||atPeace(o,sh.a))continue;
-        if(Math.hypot(cx_(g)+.5-sh.x,cy_(g)+.5-sh.y)<=4.5*K)sh.troops*=.94}
+        if(Math.hypot(cx_(g)+.5-sh.x,cy_(g)+.5-sh.y)<=4.5*K){die(sh.a,sh.troops*.06);sh.troops*=.94}}
       if(sh.troops<1){ships.splice(n,1);if(sh.a===0)addLog(Lg('Флот потоплен береговой обороной','Your fleet was sunk by coastal defenses'),'bad')}
       continue;
     }
@@ -820,8 +841,8 @@ function stepShips(){
     if(o===sh.a||atPeace(sh.a,o)){deposit(sh.a,sh.troops,i);continue}
     if(wall[i]>0){attackerOf=sh.a;hitWall(i,sh.troops*.6);if(sh.a===0||o===0)addLog(Lg(`Десант «${A.name}» разбился о стены`,`${A.name} landing broke against the walls`),o===0?'good':'bad');continue}
     const c=costOf(i);
-    if(sh.troops<c){if(sh.a===0||o===0)addLog(Lg(`Десант «${A.name}» разбит на берегу`,`${A.name} landing defeated on the shore`),o===0?'good':'bad');continue}
-    sh.troops-=c;
+    if(sh.troops<c){die(sh.a,sh.troops);if(sh.a===0||o===0)addLog(Lg(`Десант «${A.name}» разбит на берегу`,`${A.name} landing defeated on the shore`),o===0?'good':'bad');continue}
+    sh.troops-=c;die(sh.a,c);
     conquer(i,sh.a);
     const tx=Math.max(0,Math.min(W-1,Math.round(cx+sh.ux*12*K))),ty=Math.max(0,Math.min(H-1,Math.round(cy+sh.uy*12*K)));
     if(sh.troops>=1)attacks.push({a:sh.a,dir:true,ox:cx,oy:cy,tx,ty,troops:sh.troops});
@@ -848,9 +869,10 @@ function tick(){
   syncT();
   P.forEach((p,o)=>{if(!p.alive||p.cells>0)return;p.alive=false;p.troops=0;
     attacks=attacks.filter(x=>x.a!==o);for(const k in warS){const q=k.split(',');if(+q[0]===o||+q[1]===o)delete warS[k]}});
-  for(let b=1;b<P.length;b++)if(P[b].alive&&Math.random()<.08)botThink(b);
+  weariness();
+  for(let b=noEnd.coup?0:1;b<P.length;b++)if(P[b].alive&&Math.random()<.08)botThink(b);
   if(!P[0].alive&&!noEnd.lost){noEnd.lost=true;setMsg(Lg('Ваша страна пала — мир живёт дальше','Your country has fallen; the world goes on'),'err');addLog(Lg('Ваша страна пала. Можно смотреть дальше или начать заново','Your country has fallen. Keep watching or start over'),'bad')}
-  else if(P[0].alive&&!noEnd.won&&P.filter(p=>p.alive).length===1){noEnd.won=true;addLog(Lg('Вы объединили континент. Мир живёт дальше','You united the continent. The world goes on'),'good')}
+  else if(P[0].alive&&!noEnd.coup&&!noEnd.won&&P.filter(p=>p.alive).length===1){noEnd.won=true;addLog(Lg('Вы объединили континент. Мир живёт дальше','You united the continent. The world goes on'),'good')}
 }
 
 // ---------- живой мир: доход, торговля, рост городов, дороги ----------
@@ -966,10 +988,10 @@ function spawnRebel(h,city){
 function rebels(){
   const big=P.filter(x=>x.alive&&!x.rebel).length;
   for(let h=0;h<P.length;h++){const p=P[h];if(!p.alive||p.rebel)continue;
-    const ch=Math.max(0,p.cells/land-.22)*.12+(big===1?.15:0);
+    const ch=Math.max(0,p.cells/land-.22)*.12+(big===1?.15:0)+Math.max(0,(p.wr||0)-50)*.0025,far=(p.wr||0)>50?5*K:10*K;
     if(Math.random()>ch)continue;
     let best=-1,bs=-1;
-    for(let i=0;i<N;i++){if(bld[i]!==1||own[i]!==h||capZone(i)<10*K||(fd[i]>=0&&fd[i]<4*K))continue;
+    for(let i=0;i<N;i++){if(bld[i]!==1||own[i]!==h||capZone(i)<far||(fd[i]>=0&&fd[i]<4*K))continue;
       const sc=capZone(i)*(.6+Math.random()*.8)*(clock-since[i]<120?1.6:1);if(sc>bs){bs=sc;best=i}}
     if(best>=0)spawnRebel(h,best)}
   for(const p of P)if(p.alive&&p.rebel&&(clock-p.born>180||(p.cities>=2&&clock-p.born>90))){
@@ -1026,6 +1048,7 @@ function botThink(b){
   }
   // атака около пика прироста
   const fill=p.troops/cap(p);if(fill<.45+Math.random()*.35)return;
+  if((p.wr||0)>60&&Math.random()<((p.wr||0)-60)/40)return;   // на пределе — не до наступлений
   const nb=new Set();
   for(let i=0;i<N;i++){if(own[i]!==b)continue;
     for(let k=0;k<4;k++){const j=NB[i*4+k];if(j>=0&&terr[j]&&own[j]!==b)nb.add(own[j])}}
@@ -1298,6 +1321,7 @@ function ui(){
   $('sIron').textContent=`${Math.floor(me.iron)}  +${(me.inc[3]*1000/TICK).toFixed(1)}/`+Lg('с','s');
   $('sTrade').textContent=me.trade&&me.trade.length?Lg(`+${(me.tradeG*1000/TICK).toFixed(1)}/с, партнёров ${me.trade.length}`,`+${(me.tradeG*1000/TICK).toFixed(1)}/s, partners ${me.trade.length}`):Lg('нет','none');
   $('sTer').textContent=`${(me.cells/land*100).toFixed(1)}%`;
+  {const w=Math.round(me.wr||0),e=$('sWr');e.textContent=noEnd.coup?Lg('свергнуты','overthrown'):w+'%';e.style.color=noEnd.coup||w>=80?'var(--error)':w>=50?'#E8A33D':''}
   $('armyBar').style.width=(fill*100)+'%';
   $('cArt').textContent=me.costArt||120;
   if(umode===2){const bs=batteries(0),rd=bs.filter(b=>(artCd[b]||0)<=clock).length;$('dockInfo').textContent=artOn(0)?Lg(`батарей ${bs.length}, готово ${rd} · цели ${(me.marks||[]).length}/3`,`batteries ${bs.length}, ready ${rd} · targets ${(me.marks||[]).length}/3`):Lg('нет изучения','not researched')}
@@ -1362,6 +1386,7 @@ function cellAt(e){
   return{mx,my,x,y,i:(x<0||y<0||x>=W||y>=H)?-1:y*W+x};
 }
 function tapCell(i){
+  if(noEnd.coup)return;
   if(buildMode){const err=canBuild(0,i,buildMode);if(err){setMsg(err,'err');return}
     build(0,i,buildMode);setMsg(Lg(`Стройка: ${BN[buildMode]}, ${buildT(P[0])} с`,`Building ${BN[buildMode]}, ${buildT(P[0])} s`),'ok');setBuildMode(0);ui();return}
   if(i>=0&&own[i]===0&&Math.hypot(cx_(i)-cx_(P[0].cap),cy_(i)-cy_(P[0].cap))<=1.5*K){openHQ();return}
@@ -1381,7 +1406,7 @@ cv.addEventListener('pointerdown',e=>{
   if(mode==='edit'){const pan=ED.tool==='h';drag={id:e.pointerId,edit:!pan,moved:false,sx:c.mx,sy:c.my,fromOwn:!pan};
     if(ED.tool==='s')edStart(c);else if(!pan)edPaint(c);draw();return}
   if(mode!=='game'){drag=null;return}
-  drag={id:e.pointerId,x0:c.x,y0:c.y,start:c.i,fromOwn:!over&&!paused&&c.i>=0&&own[c.i]===0&&!buildMode&&umode!==2,mx:c.mx,my:c.my,moved:false,sx:c.mx,sy:c.my};
+  drag={id:e.pointerId,x0:c.x,y0:c.y,start:c.i,fromOwn:!over&&!paused&&!noEnd.coup&&c.i>=0&&own[c.i]===0&&!buildMode&&umode!==2,mx:c.mx,my:c.my,moved:false,sx:c.mx,sy:c.my};
 });
 cv.addEventListener('pointermove',e=>{
   const pr=ptrs.get(e.pointerId);if(!pr)return;
@@ -1433,6 +1458,7 @@ for(let k=0;k<3;k++)$('al'+k).addEventListener('input',e=>setAlloc(k,+e.target.v
 $('resL').addEventListener('change',e=>{showRes=e.target.checked;draw()});
 $('pct').addEventListener('input',e=>$('pctV').textContent=e.target.value+'%');
 $('retreat').addEventListener('click',()=>{
+  if(noEnd.coup)return;
   let back=0;attacks=attacks.filter(a=>{if(a.a!==0)return true;const b=backOf(a)*.8;back+=b;deposit(0,b,endCell(a));return false});
   if(!back){setMsg(Lg('Нет атак','No attacks'),'err');return}
 setMsg(Lg(`Вернулось ${Math.round(back)} бойцов`,`${Math.round(back)} troops returned`));draw();ui();
@@ -1441,7 +1467,7 @@ $('build').addEventListener('click',e=>{const b=e.target.closest('button');if(!b
 $('lb').addEventListener('pointerdown',e=>{const r=e.target.closest('tr');if(!r)return;const i=+r.dataset.i;
   selC=i===0||selC===i?-1:i;if(selC<0)$('dipl').hidden=true;ui()});
 $('peace').addEventListener('click',()=>{
-  if(selC<1||over)return;declareWar(0,selC);ui();
+  if(selC<1||over||noEnd.coup)return;declareWar(0,selC);ui();
 });
 $('pause').addEventListener('click',()=>{if(over)return;paused=!paused;$('pause').textContent=paused?Lg('Дальше','Resume'):Lg('Пауза','Pause')});
 $('speed').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;speed=+b.dataset.s;
@@ -1503,7 +1529,7 @@ async function unpackState(str){
 const saveList=()=>readJ('rub_saves',[]);
 async function saveGame(silent){
   if(!curSlot||!gameActive)return;
-  const slot=curSlot,sum={clock,map:GO.mapName,land:Math.round(P[0].cells/land*100),alive:P[0].alive};
+  const slot=curSlot,sum={clock,map:GO.mapName,land:Math.round(P[0].cells/land*100),alive:P[0].alive,coup:!!noEnd.coup};
   let data;try{data=await packState()}catch(e){if(!silent)setMsg(Lg('Не получилось сохранить','Could not save'),'err');return}
   if(!LS.set('rub_save_'+slot.id,data)){if(!silent)setMsg(Lg('Нет места для сохранения: удали старые в меню','No space to save: delete old saves in the menu'),'err');return}
   const L=saveList().filter(x=>x.id!==slot.id);
@@ -1544,7 +1570,7 @@ function renderMenu(){
   $('mRiv').value=GO.rivals;$('mRivV').textContent=GO.rivals;
   const S=saveList();
   $('mSaves').innerHTML=S.length?S.map(x=>`<div class="mrow"><div class="mrt"><b>${esc(x.name)}</b>
-    <span>${Lg(`${x.alive===false?'страна пала, ':''}земля ${x.land}%, ${fmtClock(x.clock)} игры`,`${x.alive===false?'country fallen, ':''}land ${x.land}%, ${fmtClock(x.clock)} played`)}, ${fmtDate(x.date)}</span><span>${Lg('Карта','Map')}: ${esc(x.map||Lg('Случайная','Random'))}</span></div>
+    <span>${Lg(`${x.alive===false?'страна пала, ':x.coup?'вас свергли, ':''}земля ${x.land}%, ${fmtClock(x.clock)} игры`,`${x.alive===false?'country fallen, ':x.coup?'overthrown, ':''}land ${x.land}%, ${fmtClock(x.clock)} played`)}, ${fmtDate(x.date)}</span><span>${Lg('Карта','Map')}: ${esc(x.map||Lg('Случайная','Random'))}</span></div>
     <div class="mbt"><button class="btn primary" data-load="${x.id}">${Lg('Играть','Play')}</button><button class="btn" data-dl="${x.id}">${Lg('Файл','File')}</button><button class="btn" data-del="${x.id}">${Lg('Удалить','Delete')}</button></div></div>`).join('')
     :`<p class="qline">${Lg('Пока нет сохранений','No saves yet')}</p>`;
   $('mMaps').innerHTML=maps.length?maps.map(x=>`<div class="mrow"><div class="mrt"><b>${esc(x.name)}</b><span>${Lg('Стартов','Starts')}: ${x.starts.length||Lg('случайно','random')}</span></div>
