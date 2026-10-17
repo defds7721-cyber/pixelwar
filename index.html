@@ -390,6 +390,7 @@ function newGame(opt={}){
       if(starts.every(s=>Math.hypot(s%W-cx,((s/W)|0)-cy)>=minD))starts.push(c)}
     minD=Math.max(2*K,minD-3*K);
   }
+  if(starts.length<P.length)P.length=starts.length;   // на маленькой карте места хватило не всем
   starts.forEach((c,p)=>{P[p].cap=c;const cx=c%W,cy=(c/W)|0;
     for(let dy=-3*K;dy<=3*K;dy++)for(let dx=-3*K;dx<=3*K;dx++){
       if(Math.abs(dx)+Math.abs(dy)>3*K)continue;const x=cx+dx,y=cy+dy;
@@ -638,7 +639,7 @@ function refresh(){
     for(let n=0;n<comp.length;n++){const v=comp[n];minCut=Math.min(minCut,cut[v]);cw+=wgt[v];
       for(let k=0;k<4;k++){const j=NB[v*4+k];if(j<0||!terr[j])continue;
         if(own[j]===o){if(dist[j]<0&&!seen[j]){seen[j]=1;comp.push(j)}}
-        else if(own[j]<0)neutral=true;else nbr[own[j]]=(nbr[own[j]]||0)+1}}
+        else if(own[j]<0||!atWar(o,own[j]))neutral=true;else nbr[own[j]]=(nbr[own[j]]||0)+1}}
     const ks=Object.keys(nbr);
     if(neutral||!ks.length||clock-minCut<POCKET_T*(1+MD(P[o]).pocket))continue;
     if(comp.length>Math.max(60*A,P[o].cells*.15))continue;   // большой котёл сам не сдаётся — его надо дожимать
@@ -655,7 +656,7 @@ function addLog(t,cls){
 }
 function renderLog(){
   $('logBox').hidden=!logArr.length;
-  $('log').innerHTML=logArr.slice(0,8).map(l=>`<li><time>${l.time}</time><span class="${l.cls||''}">${l.t}</span></li>`).join('');
+  $('log').innerHTML=logArr.slice(0,8).map(l=>`<li><time>${l.time}</time><span class="${esc(l.cls||'')}">${esc(l.t)}</span></li>`).join('');
 }
 
 function conquer(i,a){
@@ -666,7 +667,7 @@ function conquer(i,a){
   tr[i]=0;prog[i]=0;wall[i]=0;
   own[i]=a;P[a].cells++;cut[i]=0;since[i]=clock;if(bld[i]===1)P[a].cities++;
   if(bld[i]>=10||bld[i]===4){bld[i]=0;delete artCd[i]}   // стройка и батарея при захвате пропадают
-  if(bld[i]===2)bld[i]=0,forts=forts.filter(f=>f!==i);   // форт при захвате разрушается
+  if(bld[i]===2){bld[i]=0;forts=forts.filter(f=>f!==i);delete fortHits[i]}   // форт при захвате разрушается
   if(bld[i]===3&&o>=0&&(o===0||a===0))addLog(a===0?Lg(`Отбит карьер у «${P[o].name}»`,`Mine captured from ${P[o].name}`):Lg(`«${P[a].name}» захватил ваш карьер`,`${P[a].name} captured your mine`),a===0?'good':'bad');
   if(o>=0&&i===P[o].cap)capitulate(o,a);
 }
@@ -825,7 +826,7 @@ function stepShips(){
     const o=own[i];
     if(o>=0&&o!==sh.a&&!atWar(sh.a,o))declareWar(sh.a,o);
     if(o===sh.a||atPeace(sh.a,o)){deposit(sh.a,sh.troops,i);continue}
-    if(wall[i]>0){hitWall(i,sh.troops*.6);if(sh.a===0||o===0)addLog(Lg(`Десант «${A.name}» разбился о стены`,`${A.name} landing broke against the walls`),o===0?'good':'bad');continue}
+    if(wall[i]>0){attackerOf=sh.a;hitWall(i,sh.troops*.6);if(sh.a===0||o===0)addLog(Lg(`Десант «${A.name}» разбился о стены`,`${A.name} landing broke against the walls`),o===0?'good':'bad');continue}
     const c=costOf(i);
     if(sh.troops<c){if(sh.a===0||o===0)addLog(Lg(`Десант «${A.name}» разбит на берегу`,`${A.name} landing defeated on the shore`),o===0?'good':'bad');continue}
     sh.troops-=c;
@@ -853,7 +854,8 @@ function tick(){
   }
   stepShips();stepSites();stepArt();
   syncT();
-  for(const p of P)if(p.alive&&p.cells<=0){p.alive=false;p.troops=0}
+  P.forEach((p,o)=>{if(!p.alive||p.cells>0)return;p.alive=false;p.troops=0;
+    attacks=attacks.filter(x=>x.a!==o);for(const k in warS){const q=k.split(',');if(+q[0]===o||+q[1]===o)delete warS[k]}});
   // истёкшие пакты
   for(let a=0;a<P.length;a++)for(const b in P[a].pact)if(P[a].pact[b]&&P[a].pact[b]<=clock){
     delete P[a].pact[b];delete P[b].pact[a];
@@ -872,11 +874,11 @@ function worldLife(){
   // торговые пути: соседи, которые не воюют, торгуют сами — обоим золото и часть ресурсов друг друга
   const nb=new Set();
   for(let i=0;i<N;i++){const a=own[i];if(a<0)continue;for(let k=1;k<4;k+=2){const j=NB[i*4+k];if(j>=0&&own[j]>=0&&own[j]!==a)nb.add(a<own[j]?a*64+own[j]:own[j]*64+a)}}
-  trades=[];
+  trades=[];const base=P.map(p=>p.inc.slice());
   for(const key of nb){const a=(key/64)|0,b=key%64;if(!P[a].alive||!P[b].alive||atWar(a,b))continue;
     const A0=P[a],B0=P[b],v=.02+.006*(cpow(A0)+cpow(B0))+.004*(quarries.filter(q=>own[q]===a||own[q]===b).length);
     A0.tradeG+=v*expMul(A0);B0.tradeG+=v*expMul(B0);A0.trade.push(b);B0.trade.push(a);trades.push([a,b,v]);
-    for(const t of[2,3]){const ia=A0.inc[t],ib=B0.inc[t];A0.inc[t]+=ib*.25;B0.inc[t]+=ia*.25}}   // обмен едой и железом
+    for(const t of[2,3]){const ia=base[a][t],ib=base[b][t];A0.inc[t]+=ib*.25;B0.inc[t]+=ia*.25}}   // обмен едой и железом
   if(++lifeT%5)return;   // ниже — раз в 5 секунд
   // рост городов: в мире, со снабжением и связью со столицей
   for(let i=0;i<N;i++){if(bld[i]!==1||own[i]<0)continue;const o=own[i];
@@ -965,7 +967,7 @@ function spawnRebel(h,city){
   let o=-1;for(let k=6;k<P.length;k++)if(!P[k].alive&&P[k].cells<=0){o=k;break}
   if(o<0){if(P.length>=40)return;o=P.length}
   for(const k in warS){const q=k.split(',');if(+q[0]===o||+q[1]===o)delete warS[k]}
-  for(const x of P)if(x.pact)delete x.pact[o];
+  for(const x of P){if(x.pact)delete x.pact[o];if(x.hate)delete x.hate[o]}
   const nm=Lg('Республика '+town(),town()+' Republic'),col=RCOL[o%RCOL.length];
   P[o]=({name:nm,color:col,rgb:hex(col),troops:0,gold:50,iron:0,food:0,inc:[0,0,0,0],tradeG:0,trade:[],cells:0,cities:0,alive:true,bot:true,cap:city,
     pact:{},hate:{[h]:60},mob:1,costCity:150,costFort:60,costQuarry:150,rebel:true,host:h,born:clock,q:[]});
@@ -989,7 +991,8 @@ function rebels(){
     p.rebel=false;addLog(Lg(`«${p.name}» обрела независимость`,`${p.name} gained independence`),p.host===0?'bad':'good')}
 }
 function rebelThink(b){
-  const p=P[b];for(let i=0;i<N;i++)if(own[i]===b&&bld[i]===1)tr[i]+=1.5;   // приток добровольцевif(p.troops<40||attacks.some(a=>a.a===b))return;
+  const p=P[b];for(let i=0;i<N;i++)if(own[i]===b&&bld[i]===1)tr[i]+=1.5;   // приток добровольцев
+  if(p.troops<40||attacks.some(a=>a.a===b))return;
   const mine=[];for(let i=0;i<N;i++)if(own[i]===b&&bld[i]===1)mine.push(i);if(!mine.length)mine.push(p.cap);
   let best=null,bd=1e9;
   for(let c=0;c<N;c++){if(bld[c]!==1||own[c]<0||own[c]===b||!atWar(b,own[c]))continue;
@@ -1317,7 +1320,7 @@ function ui(){
   if(!$('hq').hidden)renderHQ();
   $('cCity').textContent=me.costCity;$('cFort').textContent=me.costFort+Lg(' жел.',' iron');$('cQuarry').textContent=me.costQuarry;
   $('lb').innerHTML=P.map((p,i)=>({p,i})).sort((a,b)=>b.p.cells-a.p.cells).map(({p,i})=>
-    `<tr data-i="${i}" class="${p.alive?'':'dead'} ${i===selC?'sel':''}"><td><span class="sw" style="background:${p.color}"></span>${p.name}${atWar(0,i)?Lg(' · война',' · war'):''}</td>`+
+    `<tr data-i="${i}" class="${p.alive?'':'dead'} ${i===selC?'sel':''}"><td><span class="sw" style="background:${esc(p.color)}"></span>${esc(p.name)}${atWar(0,i)?Lg(' · война',' · war'):''}</td>`+
     `<td>${(p.cells/land*100).toFixed(1)}%</td><td>${Math.round(p.troops)}</td></tr>`).join('');
   if(selC>0){const p=P[selC],left=Math.ceil((P[0].pact[selC]||0)-clock),w=atWar(0,selC),tc=!w&&truce(0,selC);
     $('dipl').hidden=!p.alive;$('dName').textContent=w?Lg('Война','War'):tc?Lg(`Перемирие ${left} с`,`Truce ${left} s`):Lg('Мир','Peace');
@@ -1515,7 +1518,7 @@ async function unpackState(str){
   for(const sh of ships)if(!sh.id)sh.id=++shipId;P.forEach(ensureP);
   qv=new Map(m.qv);buildNB();land=0;for(let i=0;i<N;i++)if(terr[i])land++;
   over=false;paused=false;buildMode=0;selC=-1;setBuildMode(0);$('dipl').hidden=true;$('pause').textContent=Lg('Пауза','Pause');
-  dist.fill(-1);refresh();renderLog();
+  dist.fill(-1);refresh();buildRoads();renderLog();
 }
 
 // ---------- слоты ----------
@@ -1531,7 +1534,7 @@ async function saveGame(silent){
 }
 async function loadSlot(id){
   const data=LS.get('rub_save_'+id);if(!data){alertMenu(Lg('Сохранение не найдено','Save not found'));return}
-  try{await unpackState(data)}catch(e){alertMenu(Lg('Сохранение повреждено или от другой версии','Save is corrupted or from another version'));return}
+  try{await unpackState(data)}catch(e){gameActive=false;curSlot=null;$('mResume').hidden=true;alertMenu(Lg('Сохранение повреждено или от другой версии','Save is corrupted or from another version'));return}
   const meta=saveList().find(x=>x.id===id);curSlot={id,name:meta?meta.name:GO.name};gameActive=true;closeMenu();
 }
 async function downloadText(name,text){
@@ -1595,7 +1598,7 @@ $('mImport').addEventListener('click',()=>$('mFile').click());
 $('mFile').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
   try{const j=JSON.parse(await f.text()),data=j.data||JSON.stringify(j);await unpackState(data);
     curSlot={id:'s'+Date.now(),name:(j.name||GO.name)+Lg(' (из файла)',' (from file)')};gameActive=true;closeMenu();saveGame(true)}
-  catch(err){alertMenu(Lg('Не получилось прочитать файл сохранения','Could not read the save file'))}});
+  catch(err){gameActive=false;curSlot=null;$('mResume').hidden=true;alertMenu(Lg('Не получилось прочитать файл сохранения','Could not read the save file'))}});
 $('mNewMap').addEventListener('click',()=>openEditor(null));
 $('mMaps').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.edit)openEditor(b.dataset.edit);
@@ -1606,7 +1609,7 @@ $('saveBtn').addEventListener('click',()=>saveGame(false));
 
 // ---------- редактор карт ----------
 let ED={id:null,tool:1,size:4,starts:[]};
-function blankWorld(){own.fill(-1);bld.fill(0);csz.fill(0);urban.fill(0);wall.fill(0);dist.fill(-1);tr.fill(0);prog.fill(0);res.fill(0);resT.fill(0);
+function blankWorld(){own=new Int8Array(N).fill(-1);bld=new Uint8Array(N);csz.fill(0);urban.fill(0);wall.fill(0);dist.fill(-1);tr.fill(0);prog.fill(0);res.fill(0);resT.fill(0);
   P=[];attacks=[];ships=[];sites=[];shells=[];booms=[];forts=[];quarries=[];qv=new Map();roads=[];trades=[];warS={}}
 function openEditor(id){
   if(gameActive)saveGame(true);gameActive=false;curSlot=null;
